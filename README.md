@@ -2,20 +2,22 @@
 
 # Describe
 
-`ngx_http_compress_normalize_module`` is an Nginx module designed to parse, normalize, and manage the Accept-Encoding headers from client requests. It ensures consistent handling of compression algorithms by standardizing the Accept-Encoding values, facilitating better compression management and improved vary cache performance.
+`ngx_http_compress_normalize_module` is an Nginx module designed to parse, normalize, and manage the Accept-Encoding headers from client requests. It ensures consistent handling of compression algorithms by standardizing the Accept-Encoding values, facilitating better compression management and improved vary cache performance.
 
 # Table of Content
 
-* [Name](#name)
-* [Status](#status)
-* [Synopsis](#synopsis)
-* [Installation](#installation)
-* [Directives](#directives)
-  * [compress_normalize_accept_encoding](#compress_normalize_accept_encoding)
-* [Variables](#variables)
-  * [\$compress_original_accept_encoding](#\$compress_original_accept_encoding)
-* [Author](#author)
-* [License](#license)
+- [ngx\_http\_compress\_normalize\_module](#ngx_http_compress_normalize_module)
+- [Describe](#describe)
+- [Table of Content](#table-of-content)
+- [Status](#status)
+- [Synopsis](#synopsis)
+- [Installation](#installation)
+- [Directives](#directives)
+	- [compress\_normalize\_accept\_encoding](#compress_normalize_accept_encoding)
+- [Variables](#variables)
+	- [$compress\_original\_accept\_encoding](#compress_original_accept_encoding)
+- [Author](#author)
+- [License](#license)
 
 # Status
 
