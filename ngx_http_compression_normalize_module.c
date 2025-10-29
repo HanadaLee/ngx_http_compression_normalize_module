@@ -660,7 +660,7 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     enc_parts = encoding_parts->elts;
     for (i = 0; i < encoding_parts->nelts; i++) {
         if (ngx_http_compression_normalize_parse_encoding_part(r,
-            &enc_parts[i], accepted_encodings) != NGX_OK)
+                &enc_parts[i], accepted_encodings) != NGX_OK)
         {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
@@ -669,8 +669,8 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     normalized_accept_encoding.len = 0;
     normalized_accept_encoding.data = NULL;
     if (ngx_http_compression_normalize_check_combinations(r,
-        accepted_encodings, cncf->combinations,
-        &normalized_accept_encoding) == NGX_OK)
+            accepted_encodings, cncf->combinations,
+            &normalized_accept_encoding) == NGX_OK)
     {
         h->value.len = normalized_accept_encoding.len;
         h->value.data = normalized_accept_encoding.data;
