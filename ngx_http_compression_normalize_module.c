@@ -8,9 +8,12 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+#if (NGX_CONDITION)
+#include <ngx_http_condition_module.h>
+#endif
+
 
 typedef struct {
-    ngx_flag_t    enable;
     ngx_array_t  *combinations;
 } ngx_http_compression_normalize_conf_t;
 
@@ -45,7 +48,12 @@ static ngx_int_t ngx_http_compression_normalize_init(ngx_conf_t *cf);
 static ngx_command_t ngx_http_compression_normalize_commands[] = {
 
     { ngx_string("compression_normalize_accept_encoding"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+                        |NGX_HTTP_LOC_WHEN_CONF
+#endif
+                        |NGX_CONF_1MORE,
       ngx_http_compression_normalize,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
@@ -158,12 +166,12 @@ ngx_http_compression_normalize_create_loc_conf(ngx_conf_t *cf)
     ngx_http_compression_normalize_conf_t  *conf;
 
     conf = ngx_pcalloc(cf->pool,
-        sizeof(ngx_http_compression_normalize_conf_t));
+                       sizeof(ngx_http_compression_normalize_conf_t));
     if (conf == NULL) {
         return NULL;
     }
 
-    conf->enable = NGX_CONF_UNSET;
+    conf->combinations = NGX_CONF_UNSET_PTR;
 
     return conf;
 }
@@ -173,14 +181,19 @@ static char *
 ngx_http_compression_normalize_merge_loc_conf(ngx_conf_t *cf,
     void *parent, void *child)
 {
-    ngx_http_compression_normalize_conf_t *prev = parent;
-    ngx_http_compression_normalize_conf_t *conf = child;
+    ngx_http_compression_normalize_conf_t  *prev = parent;
+    ngx_http_compression_normalize_conf_t  *conf = child;
 
-    ngx_conf_merge_value(conf->enable, prev->enable, 0);
-
-    if (conf->combinations == NULL) {
-        conf->combinations = prev->combinations;
+#if (NGX_CONDITION)
+    if (ngx_conf_merge_conditional_ptr_value(cf, &conf->combinations,
+                                             prev->combinations, NULL)
+        != NGX_OK)
+    {
+        return NGX_CONF_ERROR;
     }
+#else
+    ngx_conf_merge_ptr_value(conf->combinations, prev->combinations, NULL);
+#endif
 
     return NGX_CONF_OK;
 }
@@ -189,33 +202,80 @@ ngx_http_compression_normalize_merge_loc_conf(ngx_conf_t *cf,
 static char *
 ngx_http_compression_normalize(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_http_compression_normalize_conf_t *cncf = conf;
+    ngx_http_compression_normalize_conf_t  *cncf = conf;
 
-    ngx_str_t        *value;
-    ngx_uint_t        i;
+    ngx_array_t                          *combinations;
+    ngx_str_t                            *str, *value;
+    ngx_uint_t                            i;
+#if (NGX_CONDITION)
+    ngx_condition_expr_id_t               expr_id;
+    ngx_conf_condition_ptr_ctx_t         *ctx;
+#endif
 
-    if (cncf->enable != NGX_CONF_UNSET) {
+#if (NGX_CONDITION)
+    if (cncf->combinations == NULL
+        || cncf->combinations == NGX_CONF_UNSET_PTR)
+    {
+        cncf->combinations = ngx_array_create(cf->pool, 2,
+            sizeof(ngx_conf_condition_ptr_ctx_t));
+        if (cncf->combinations == NULL) {
+            return NGX_CONF_ERROR;
+        }
+    }
+
+    expr_id = ngx_condition_get_associated_expr_id(cf);
+
+    ctx = ngx_condition_find_expr_ctx(cncf->combinations, expr_id,
+                                      sizeof(ngx_conf_condition_ptr_ctx_t),
+                                      offsetof(ngx_conf_condition_ptr_ctx_t,
+                                               expr_id));
+    if (ctx != NULL) {
         return "is duplicate";
     }
+
+    ctx = ngx_array_push(cncf->combinations);
+    if (ctx == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ctx->value = NULL;
+    ctx->expr_id = expr_id;
+#else
+    if (cncf->combinations != NGX_CONF_UNSET_PTR) {
+        return "is duplicate";
+    }
+#endif
 
     value = cf->args->elts;
 
     if (cf->args->nelts == 2 && ngx_strcmp(value[1].data, "off") == 0) {
-        cncf->enable = 0;
+#if !(NGX_CONDITION)
+        cncf->combinations = NULL;
+#endif
         return NGX_CONF_OK;
     }
 
-    cncf->enable = 1;
-
-    cncf->combinations = ngx_array_create(cf->pool,
-        cf->args->nelts - 1, sizeof(ngx_str_t));
-    if (cncf->combinations == NULL) {
+    combinations = ngx_array_create(cf->pool, cf->args->nelts - 1,
+                                    sizeof(ngx_str_t));
+    if (combinations == NULL) {
+#if (NGX_CONDITION)
+        cncf->combinations->nelts--;
+#endif
         return NGX_CONF_ERROR;
     }
 
+#if (NGX_CONDITION)
+    ctx->value = combinations;
+#else
+    cncf->combinations = combinations;
+#endif
+
     for (i = 1; i < cf->args->nelts; i++) {
-        ngx_str_t *str = ngx_array_push(cncf->combinations);
+        str = ngx_array_push(combinations);
         if (str == NULL) {
+#if (NGX_CONDITION)
+            cncf->combinations->nelts--;
+#endif
             return NGX_CONF_ERROR;
         }
 
@@ -600,24 +660,32 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
 {
     ngx_http_compression_normalize_conf_t  *cncf;
     ngx_http_compression_normalize_ctx_t   *ctx;
-    ngx_table_elt_t                     *h;
-    ngx_array_t                         *encoding_parts = NULL;
-    ngx_array_t                         *accepted_encodings;
-    ngx_str_t                            normalized_accept_encoding;
-    ngx_uint_t                           i;
-    ngx_str_t                           *enc_parts;
+    ngx_array_t                            *accepted_encodings;
+    ngx_array_t                            *combinations;
+    ngx_array_t                            *encoding_parts;
+    ngx_str_t                              *enc_parts;
+    ngx_str_t                               normalized_accept_encoding;
+    ngx_table_elt_t                        *h;
+    ngx_uint_t                              i;
 
     cncf = ngx_http_get_module_loc_conf(r,
-        ngx_http_compression_normalize_module);
+                                        ngx_http_compression_normalize_module);
 
-    if (!cncf->enable) {
+#if (NGX_CONDITION)
+    combinations =
+        ngx_http_get_conditional_ptr_value(r, cncf->combinations);
+#else
+    combinations = cncf->combinations;
+#endif
+
+    if (combinations == NULL) {
         return NGX_DECLINED;
     }
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_compression_normalize_module);
     if (ctx == NULL) {
         ctx = ngx_pcalloc(r->pool,
-            sizeof(ngx_http_compression_normalize_ctx_t));
+                          sizeof(ngx_http_compression_normalize_ctx_t));
         if (ctx == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
@@ -640,10 +708,12 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    ngx_memcpy(ctx->original_accept_encoding.data,
-        h->value.data, h->value.len);
+    ngx_memcpy(ctx->original_accept_encoding.data, h->value.data,
+               h->value.len);
 
     /* parse Accept-Encoding request header */
+    encoding_parts = NULL;
+
     if (ngx_http_compression_normalize_parse_accept_encoding(r,
             &encoding_parts) != NGX_OK)
     {
@@ -652,7 +722,8 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
 
     /* parse compress encoding and q value */
     accepted_encodings = ngx_array_create(r->pool,
-        encoding_parts->nelts, sizeof(ngx_str_t));
+                                          encoding_parts->nelts,
+                                          sizeof(ngx_str_t));
     if (accepted_encodings == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -660,7 +731,7 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     enc_parts = encoding_parts->elts;
     for (i = 0; i < encoding_parts->nelts; i++) {
         if (ngx_http_compression_normalize_parse_encoding_part(r,
-                &enc_parts[i], accepted_encodings) != NGX_OK)
+            &enc_parts[i], accepted_encodings) != NGX_OK)
         {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
@@ -669,8 +740,8 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     normalized_accept_encoding.len = 0;
     normalized_accept_encoding.data = NULL;
     if (ngx_http_compression_normalize_check_combinations(r,
-            accepted_encodings, cncf->combinations,
-            &normalized_accept_encoding) == NGX_OK)
+        accepted_encodings, combinations,
+        &normalized_accept_encoding) == NGX_OK)
     {
         h->value.len = normalized_accept_encoding.len;
         h->value.data = normalized_accept_encoding.data;

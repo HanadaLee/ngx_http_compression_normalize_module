@@ -13,9 +13,9 @@
 - [Synopsis](#synopsis)
 - [Installation](#installation)
 - [Directives](#directives)
-	- [compression\_normalize\_accept\_encoding](#compression_normalize_accept_encoding)
+  - [compression\_normalize\_accept\_encoding](#compression_normalize_accept_encoding)
 - [Variables](#variables)
-	- [$compression\_original\_accept\_encoding](#compression_original_accept_encoding)
+  - [$compression\_original\_accept\_encoding](#compression_original_accept_encoding)
 - [Author](#author)
 - [License](#license)
 
@@ -52,7 +52,7 @@ To use theses modules, configure your nginx branch with `--add-module=/path/to/n
 
 **Default:** *compression_normalize_accept_encoding off;*
 
-**Context:** *http, server, location*
+**Context:** *http, server, location, when*
 
 Enables the normalization of the Accept-Encoding header by specifying preferred combinations of compression algorithms. This directive accepts a list of compression methods, allowing to define the order and priority of encoding types that the server should prefer when responding to client requests.
 
