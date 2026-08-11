@@ -68,11 +68,11 @@ static ngx_http_module_t ngx_http_compression_normalize_module_ctx = {
     ngx_http_compression_normalize_add_variables,   /* preconfiguration */
     ngx_http_compression_normalize_init,            /* postconfiguration */
 
-    NULL,                                           /* create main configuration */
-    NULL,                                           /* init main configuration */
+    NULL,                                           /* create main conf */
+    NULL,                                           /* init main conf */
 
-    NULL,                                           /* create server configuration */
-    NULL,                                           /* merge server configuration */
+    NULL,                                           /* create server conf */
+    NULL,                                           /* merge server conf */
 
     ngx_http_compression_normalize_create_loc_conf, /* create location config */
     ngx_http_compression_normalize_merge_loc_conf   /* merge location config */
@@ -110,7 +110,7 @@ ngx_http_compression_normalize_original_accept_encoding_variable(
     ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
     ngx_http_compression_normalize_ctx_t  *ctx;
-    ngx_table_elt_t                    *ae;
+    ngx_table_elt_t                       *ae;
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_compression_normalize_module);
 
@@ -310,6 +310,7 @@ ngx_http_compression_normalize_parse_accept_encoding(ngx_http_request_t *r,
     if (ae.data == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
     ngx_memcpy(ae.data, h->value.data, ae.len);
 
     for (i = 0; i < ae.len; i++) {
@@ -348,6 +349,7 @@ ngx_http_compression_normalize_parse_accept_encoding(ngx_http_request_t *r,
             while (start < end && isspace(*start)) {
                 start++;
             }
+
             while (end > start && isspace(*(end - 1))) {
                 end--;
             }
@@ -357,12 +359,14 @@ ngx_http_compression_normalize_parse_accept_encoding(ngx_http_request_t *r,
                 if (part == NULL) {
                     return NGX_HTTP_INTERNAL_SERVER_ERROR;
                 }
+
                 part->len = end - start;
                 part->data = start;
             }
 
             p++;
             start = p;
+
         } else {
             p++;
         }
@@ -382,6 +386,7 @@ ngx_http_compression_normalize_parse_accept_encoding(ngx_http_request_t *r,
         if (part == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
+
         part->len = end - start;
         part->data = start;
     }
@@ -395,6 +400,7 @@ ngx_http_compression_normalize_parse_encoding_part(ngx_http_request_t *r,
     ngx_str_t *part, ngx_array_t *accepted_encodings)
 {
     u_char     *semicolon;
+    ngx_str_t  *accepted_enc;
     ngx_str_t   encoding;
     ngx_str_t   params;
     u_char     *p, *last;
@@ -410,6 +416,7 @@ ngx_http_compression_normalize_parse_encoding_part(ngx_http_request_t *r,
 
         params.data = semicolon + 1;
         params.len = (part->data + part->len) - params.data;
+
     } else {
         encoding = *part;
         params.data = NULL;
@@ -473,6 +480,7 @@ ngx_http_compression_normalize_parse_encoding_part(ngx_http_request_t *r,
                 if (c != '0') {
                     q_value_is_zero = 0;  /* non-zero number found */
                 }
+
             } else {
                 /* invalid character found */
                 ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
@@ -480,6 +488,7 @@ ngx_http_compression_normalize_parse_encoding_part(ngx_http_request_t *r,
                               "'%c' in q-value", c);
                 return NGX_OK;
             }
+
             p++;
         }
 
@@ -490,19 +499,19 @@ ngx_http_compression_normalize_parse_encoding_part(ngx_http_request_t *r,
     }
 
     /* Add to accepted_encodings */
-    {
-        ngx_str_t *accepted_enc = ngx_array_push(accepted_encodings);
-        if (accepted_enc == NULL) {
-            return NGX_HTTP_INTERNAL_SERVER_ERROR;
-        }
 
-        accepted_enc->len = encoding.len;
-        accepted_enc->data = ngx_pnalloc(r->pool, encoding.len);
-        if (accepted_enc->data == NULL) {
-            return NGX_HTTP_INTERNAL_SERVER_ERROR;
-        }
-        ngx_memcpy(accepted_enc->data, encoding.data, encoding.len);
+    accepted_enc = ngx_array_push(accepted_encodings);
+    if (accepted_enc == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    accepted_enc->len = encoding.len;
+    accepted_enc->data = ngx_pnalloc(r->pool, encoding.len);
+    if (accepted_enc->data == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    ngx_memcpy(accepted_enc->data, encoding.data, encoding.len);
 
     return NGX_OK;
 }
@@ -538,6 +547,7 @@ ngx_http_compression_normalize_check_combinations(ngx_http_request_t *r,
         if (combo_trimmed.data == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
+
         ngx_memcpy(combo_trimmed.data, combo.data, combo.len);
         combo_trimmed.len = combo.len;
 
@@ -550,7 +560,7 @@ ngx_http_compression_normalize_check_combinations(ngx_http_request_t *r,
             combo_trimmed.len--;
         }
 
-        while (combo_trimmed.len > 0 
+        while (combo_trimmed.len > 0
                && isspace(combo_trimmed.data[combo_trimmed.len - 1]))
         {
             combo_trimmed.len--;
@@ -586,12 +596,14 @@ ngx_http_compression_normalize_check_combinations(ngx_http_request_t *r,
                     if (part == NULL) {
                         return NGX_HTTP_INTERNAL_SERVER_ERROR;
                     }
+
                     part->len = end - start;
                     part->data = start;
                 }
 
                 p++;
                 start = p;
+
             } else {
                 p++;
             }
@@ -612,11 +624,12 @@ ngx_http_compression_normalize_check_combinations(ngx_http_request_t *r,
             if (part == NULL) {
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
             }
+
             part->len = end - start;
             part->data = start;
         }
 
-        /* Checks if the encodings in the combination are among the accepted encodings */
+        /* Check whether all encodings in the combination are accepted. */
         all_included = 1;
         combo_encodings = combo_parts->elts;
         combo_encodings_nelts = combo_parts->nelts;
@@ -689,6 +702,7 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
         if (ctx == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
+
         ngx_http_set_ctx(r, ctx, ngx_http_compression_normalize_module);
     }
 
