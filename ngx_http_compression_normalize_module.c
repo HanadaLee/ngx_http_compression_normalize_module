@@ -99,10 +99,13 @@ static ngx_http_variable_t  ngx_http_compression_normalize_vars[] = {
 
     { ngx_string("compression_original_accept_encoding"), NULL,
       ngx_http_compression_normalize_original_accept_encoding_variable,
-      0, NGX_HTTP_VAR_NOCACHEABLE, 0 },
+      0, 0, 0 },
 
     { ngx_null_string, NULL, NULL, 0, 0, 0 }
 };
+
+
+static ngx_uint_t  ngx_http_compression_normalize_original_index;
 
 
 static ngx_int_t
@@ -144,6 +147,7 @@ ngx_http_compression_normalize_original_accept_encoding_variable(
 static ngx_int_t
 ngx_http_compression_normalize_add_variables(ngx_conf_t *cf)
 {
+    ngx_int_t             n;
     ngx_http_variable_t  *var, *v;
 
     for (v = ngx_http_compression_normalize_vars; v->name.len; v++) {
@@ -155,6 +159,14 @@ ngx_http_compression_normalize_add_variables(ngx_conf_t *cf)
         var->get_handler = v->get_handler;
         var->data = v->data;
     }
+
+    n = ngx_http_get_variable_index(cf,
+                                    &ngx_http_compression_normalize_vars[0].name);
+    if (n == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+
+    ngx_http_compression_normalize_original_index = n;
 
     return NGX_OK;
 }
@@ -679,6 +691,8 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     ngx_str_t                              *enc_parts;
     ngx_str_t                               normalized_accept_encoding;
     ngx_table_elt_t                        *h;
+    ngx_http_variable_value_t              *vv;
+    ngx_int_t                               rc;
     ngx_uint_t                              i;
 
     cncf = ngx_http_get_module_loc_conf(r,
@@ -725,6 +739,16 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     ngx_memcpy(ctx->original_accept_encoding.data, h->value.data,
                h->value.len);
 
+    vv = &r->variables[ngx_http_compression_normalize_original_index];
+
+    if (!vv->valid) {
+        vv->len = ctx->original_accept_encoding.len;
+        vv->valid = 1;
+        vv->no_cacheable = 0;
+        vv->not_found = 0;
+        vv->data = ctx->original_accept_encoding.data;
+    }
+
     /* parse Accept-Encoding request header */
     encoding_parts = NULL;
 
@@ -753,12 +777,20 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
 
     normalized_accept_encoding.len = 0;
     normalized_accept_encoding.data = NULL;
-    if (ngx_http_compression_normalize_check_combinations(r,
-        accepted_encodings, combinations,
-        &normalized_accept_encoding) == NGX_OK)
-    {
+
+    rc = ngx_http_compression_normalize_check_combinations(r,
+        accepted_encodings, combinations, &normalized_accept_encoding);
+
+    if (rc == NGX_OK) {
         h->value.len = normalized_accept_encoding.len;
         h->value.data = normalized_accept_encoding.data;
+
+    } else if (rc == NGX_DECLINED) {
+        h->hash = 0;
+        r->headers_in.accept_encoding = NULL;
+
+    } else {
+        return rc;
     }
 
     return NGX_DECLINED;
