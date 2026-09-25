@@ -8,8 +8,8 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-#if (NGX_CONDITION)
-#include <ngx_http_condition_module.h>
+#if (NGX_EXPR)
+#include <ngx_http_expr_module.h>
 #endif
 
 
@@ -49,7 +49,7 @@ static ngx_command_t ngx_http_compression_normalize_commands[] = {
 
     { ngx_string("compression_normalize_accept_encoding"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
                         |NGX_HTTP_LOC_WHEN_CONF
 #endif
@@ -196,9 +196,9 @@ ngx_http_compression_normalize_merge_loc_conf(ngx_conf_t *cf,
     ngx_http_compression_normalize_conf_t  *prev = parent;
     ngx_http_compression_normalize_conf_t  *conf = child;
 
-#if (NGX_CONDITION)
-    if (ngx_conf_merge_conditional_ptr_value(cf, &conf->combinations,
-                                             prev->combinations, NULL)
+#if (NGX_EXPR)
+    if (ngx_conf_merge_expr_ptr_value(cf, &conf->combinations,
+                                      prev->combinations, NULL)
         != NGX_OK)
     {
         return NGX_CONF_ERROR;
@@ -219,28 +219,28 @@ ngx_http_compression_normalize(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_array_t                          *combinations;
     ngx_str_t                            *str, *value;
     ngx_uint_t                            i;
-#if (NGX_CONDITION)
-    ngx_condition_expr_id_t               expr_id;
-    ngx_conf_condition_ptr_ctx_t         *ctx;
+#if (NGX_EXPR)
+    ngx_expr_when_id_t                    expr_id;
+    ngx_conf_expr_ptr_ctx_t              *ctx;
 #endif
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     if (cncf->combinations == NULL
         || cncf->combinations == NGX_CONF_UNSET_PTR)
     {
         cncf->combinations = ngx_array_create(cf->pool, 2,
-            sizeof(ngx_conf_condition_ptr_ctx_t));
+            sizeof(ngx_conf_expr_ptr_ctx_t));
         if (cncf->combinations == NULL) {
             return NGX_CONF_ERROR;
         }
     }
 
-    expr_id = ngx_condition_get_associated_expr_id(cf);
+    expr_id = ngx_expr_get_associated_when_id(cf);
 
-    ctx = ngx_condition_find_expr_ctx(cncf->combinations, expr_id,
-                                      sizeof(ngx_conf_condition_ptr_ctx_t),
-                                      offsetof(ngx_conf_condition_ptr_ctx_t,
-                                               expr_id));
+    ctx = ngx_expr_find_ctx(cncf->combinations, expr_id,
+                            sizeof(ngx_conf_expr_ptr_ctx_t),
+                            offsetof(ngx_conf_expr_ptr_ctx_t,
+                            expr_id));
     if (ctx != NULL) {
         return "is duplicate";
     }
@@ -261,7 +261,7 @@ ngx_http_compression_normalize(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     value = cf->args->elts;
 
     if (cf->args->nelts == 2 && ngx_strcmp(value[1].data, "off") == 0) {
-#if !(NGX_CONDITION)
+#if !(NGX_EXPR)
         cncf->combinations = NULL;
 #endif
         return NGX_CONF_OK;
@@ -270,13 +270,13 @@ ngx_http_compression_normalize(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     combinations = ngx_array_create(cf->pool, cf->args->nelts - 1,
                                     sizeof(ngx_str_t));
     if (combinations == NULL) {
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
         cncf->combinations->nelts--;
 #endif
         return NGX_CONF_ERROR;
     }
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     ctx->value = combinations;
 #else
     cncf->combinations = combinations;
@@ -285,7 +285,7 @@ ngx_http_compression_normalize(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     for (i = 1; i < cf->args->nelts; i++) {
         str = ngx_array_push(combinations);
         if (str == NULL) {
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
             cncf->combinations->nelts--;
 #endif
             return NGX_CONF_ERROR;
@@ -698,9 +698,9 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
     cncf = ngx_http_get_module_loc_conf(r,
                                         ngx_http_compression_normalize_module);
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     combinations =
-        ngx_http_get_conditional_ptr_value(r, cncf->combinations);
+        ngx_http_get_expr_ptr_value(r, cncf->combinations);
 #else
     combinations = cncf->combinations;
 #endif
