@@ -41,6 +41,8 @@ static ngx_int_t ngx_http_compression_normalize_parse_encoding_part(
 static ngx_int_t ngx_http_compression_normalize_check_combinations(
     ngx_http_request_t *r, ngx_array_t *accepted_encodings,
     ngx_array_t *combinations, ngx_str_t *normalized_accept_encoding);
+static ngx_int_t ngx_http_compression_normalize_remove(ngx_http_request_t *r,
+    ngx_table_elt_t *header);
 static ngx_int_t ngx_http_compression_normalize_handler(ngx_http_request_t *r);
 static ngx_int_t ngx_http_compression_normalize_init(ngx_conf_t *cf);
 
@@ -681,6 +683,91 @@ ngx_http_compression_normalize_check_combinations(ngx_http_request_t *r,
 
 
 static ngx_int_t
+ngx_http_compression_normalize_remove(ngx_http_request_t *r,
+    ngx_table_elt_t *header)
+{
+    ngx_uint_t        i;
+    ngx_list_t       *list;
+    ngx_list_part_t  *part, *prev, *next;
+    ngx_table_elt_t  *h;
+
+    list = &r->headers_in.headers;
+    prev = NULL;
+
+    for (part = &list->part; part; prev = part, part = part->next) {
+        h = part->elts;
+
+        for (i = 0; i < part->nelts; i++) {
+            if (&h[i] != header) {
+                continue;
+            }
+
+            /* Keep the addresses of the remaining header fields unchanged. */
+
+            if (part->nelts == 1) {
+                if (part->next) {
+                    next = part->next;
+                    *part = *next;
+
+                    if (list->last == next) {
+                        list->last = part;
+                        list->nalloc = part->nelts;
+                    }
+
+                } else if (prev) {
+                    prev->next = NULL;
+                    list->last = prev;
+                    list->nalloc = prev->nelts;
+
+                } else {
+                    part->nelts = 0;
+                    list->nalloc = 1;
+                }
+
+            } else if (i == 0) {
+                part->elts = &h[1];
+                part->nelts--;
+
+                if (list->last == part) {
+                    list->nalloc = part->nelts;
+                }
+
+            } else if (i == part->nelts - 1) {
+                part->nelts--;
+
+                if (list->last == part) {
+                    list->nalloc = part->nelts;
+                }
+
+            } else {
+                next = ngx_palloc(r->pool, sizeof(ngx_list_part_t));
+                if (next == NULL) {
+                    return NGX_ERROR;
+                }
+
+                next->elts = &h[i + 1];
+                next->nelts = part->nelts - i - 1;
+                next->next = part->next;
+                part->nelts = i;
+                part->next = next;
+
+                if (list->last == part) {
+                    list->last = next;
+                    list->nalloc = next->nelts;
+                }
+            }
+
+            header->hash = 0;
+
+            return NGX_OK;
+        }
+    }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
 ngx_http_compression_normalize_handler(ngx_http_request_t *r)
 {
     ngx_http_compression_normalize_conf_t  *cncf;
@@ -786,7 +873,12 @@ ngx_http_compression_normalize_handler(ngx_http_request_t *r)
         h->value.data = normalized_accept_encoding.data;
 
     } else if (rc == NGX_DECLINED) {
-        h->hash = 0;
+        for ( /* void */; h; h = h->next) {
+            if (ngx_http_compression_normalize_remove(r, h) != NGX_OK) {
+                return NGX_HTTP_INTERNAL_SERVER_ERROR;
+            }
+        }
+
         r->headers_in.accept_encoding = NULL;
 
     } else {
