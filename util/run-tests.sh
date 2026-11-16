@@ -16,7 +16,6 @@ configure_args=(
     --with-http_v2_module
     --with-http_realip_module
     --with-http_sub_module
-    --with-http_json_module
     --with-stream
     --with-stream_ssl_module
     --with-stream_realip_module
@@ -27,10 +26,19 @@ if [[ "${TEST_EXPR:-enabled}" == enabled ]]; then
     export TEST_NGINX_EXPR=1
 fi
 
-configure_args+=(--add-module="$module_root")
+if [[ "${TEST_MODULE_LINK:-static}" == dynamic ]]; then
+    configure_args+=(--add-dynamic-module="$module_root")
+    export TEST_NGINX_GLOBALS="${TEST_NGINX_GLOBALS:-} load_module $nginx_source/objs/ngx_http_compression_normalize_module.so;"
+else
+    configure_args+=(--add-module="$module_root")
+fi
 
 cd "$nginx_source"
-sh ./configure "${configure_args[@]}"
+if [[ -f auto/configure ]]; then
+    sh auto/configure "${configure_args[@]}"
+else
+    sh configure "${configure_args[@]}"
+fi
 make -j"$build_jobs"
 
 export TEST_NGINX_BINARY="$nginx_source/objs/nginx"
@@ -43,7 +51,7 @@ collect_logs() {
 }
 trap collect_logs EXIT
 if [[ "$(id -u)" == 0 ]]; then
-    export TEST_NGINX_GLOBALS="${TEST_NGINX_GLOBALS:-user root;}"
+    export TEST_NGINX_GLOBALS="user root; ${TEST_NGINX_GLOBALS:-}"
 fi
 "$TEST_NGINX_BINARY" -V
 

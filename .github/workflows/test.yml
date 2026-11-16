@@ -7,7 +7,7 @@ on:
     inputs:
       nginx_ref:
         description: nginx-ext branch, tag or commit
-        default: '1.31.7'
+        default: '1.31.8'
         required: true
         type: string
 
@@ -23,6 +23,19 @@ jobs:
     if: github.repository == 'HanadaLee/ngx_http_compression_normalize_module'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nginx: vanilla
+            link: static
+            expr: enabled
+          - nginx: vanilla
+            link: dynamic
+            expr: disabled
+          - nginx: ext
+            link: static
+            expr: enabled
     steps:
       - name: Check out module
         uses: actions/checkout@v6
@@ -30,12 +43,23 @@ jobs:
           persist-credentials: false
 
       - name: Check out nginx-ext
+        if: matrix.nginx == 'ext'
         uses: actions/checkout@v6
         with:
           repository: HanadaLee/nginx-ext
-          ref: ${{ inputs.nginx_ref || '1.31.7' }}
+          ref: ${{ inputs.nginx_ref || '1.31.8' }}
           path: .ci/nginx
           persist-credentials: false
+
+      - name: Download vanilla nginx from the OpenResty bundle
+        if: matrix.nginx == 'vanilla'
+        run: |
+          curl --fail --silent --show-error --location \
+            https://openresty.org/download/openresty-1.31.8.1.tar.gz \
+            --output /tmp/openresty.tar.gz
+          tar -xzf /tmp/openresty.tar.gz -C /tmp
+          mkdir -p .ci
+          cp -a /tmp/openresty-1.31.8.1/bundle/nginx-1.31.8 .ci/nginx
 
       - name: Check out ngx_expr_module
         uses: actions/checkout@v6
@@ -64,14 +88,15 @@ jobs:
 
       - name: Build and test
         env:
-          TEST_EXPR: enabled
+          TEST_EXPR: ${{ matrix.expr }}
+          TEST_MODULE_LINK: ${{ matrix.link }}
         run: bash util/run-tests.sh
 
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: test-logs-enabled
+          name: test-logs-${{ matrix.nginx }}-${{ matrix.link }}-${{ matrix.expr }}
           path: |
             .ci/test-output/**/*.log
             .ci/test-output/run.log

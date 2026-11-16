@@ -18,8 +18,7 @@ use Test::Nginx;
 select STDERR; $| = 1;
 select STDOUT; $| = 1;
 
-my $t = Test::Nginx->new()->has(qw/http rewrite ngx_expr_module
-	ngx_http_compression_normalize_module/)->plan(13);
+my $t = Test::Nginx->new()->has(qw/http rewrite ngx_expr_module/)->plan(13);
 
 $t->write_file_expand('nginx.conf', <<'EOF');
 
